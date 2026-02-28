@@ -108,9 +108,6 @@
     "academies": "학원",
     "transport": "교통",
     "population": "인구",
-    "mapProvider": "지도 제공자",
-    "kakao": "카카오맵",
-    "naver": "네이버맵",
     "analyze": "분석하기"
   },
   "analysis": {

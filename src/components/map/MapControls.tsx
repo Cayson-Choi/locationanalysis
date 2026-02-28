@@ -10,7 +10,6 @@ import { Separator } from '@/components/ui/separator';
 import { useMapStore } from '@/stores/mapStore';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useIsMobile } from '@/hooks/useMediaQuery';
-import { MapProviderSwitcher } from '@/components/layout/MapProviderSwitcher';
 import { MIN_RADIUS, MAX_RADIUS, RADIUS_STEP } from '@/lib/utils/constants';
 
 interface MapControlsProps {
@@ -78,11 +77,6 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
                   />
                 </div>
               ))}
-              <Separator />
-              <div className="flex items-center justify-between">
-                <Label>{t('mapProvider')}</Label>
-                <MapProviderSwitcher />
-              </div>
             </div>
           </SheetContent>
         </Sheet>
@@ -171,12 +165,6 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
         ))}
       </div>
 
-      <Separator />
-
-      <div className="flex items-center justify-between">
-        <Label className="text-xs">{t('mapProvider')}</Label>
-        <MapProviderSwitcher />
-      </div>
     </div>
   );
 }

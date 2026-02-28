@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useUIStore } from '@/stores/uiStore';
 import { useMapStore } from '@/stores/mapStore';
 import { KakaoMapAdapter } from '@/lib/map/kakaoAdapter';
-import { NaverMapAdapter } from '@/lib/map/naverAdapter';
 import type { MapAdapterInterface } from '@/lib/map/mapAdapter';
-import type { MapProvider } from '@/types/map';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface MapContainerProps {
@@ -34,76 +31,42 @@ function isKakaoReady(): boolean {
   return !!(window.kakao?.maps?.Map);
 }
 
-function isNaverReady(): boolean {
-  return !!(window.naver?.maps?.Map);
-}
-
 export function MapContainer({ onMapReady, className = '' }: MapContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<MapAdapterInterface | null>(null);
-  const { mapProvider } = useUIStore();
   const { center, zoom } = useMapStore();
   const [isReady, setIsReady] = useState(false);
-  const prevProviderRef = useRef<MapProvider>(mapProvider);
 
   const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-  const naverKey = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
-  const hasKey = (mapProvider === 'kakao' && !!kakaoKey) || (mapProvider === 'naver' && !!naverKey);
 
-  // Reset when provider changes
-  useEffect(() => {
-    if (prevProviderRef.current !== mapProvider) {
-      prevProviderRef.current = mapProvider;
-      if (adapterRef.current) {
-        adapterRef.current.destroy();
-        adapterRef.current = null;
-      }
-      setIsReady(false);
-    }
-  }, [mapProvider]);
-
-  const initializeMap = useCallback((providerToInit: MapProvider) => {
+  const initializeMap = useCallback(() => {
     if (!containerRef.current || adapterRef.current) return;
 
-    const adapter =
-      providerToInit === 'kakao' ? new KakaoMapAdapter() : new NaverMapAdapter();
-
+    const adapter = new KakaoMapAdapter();
     adapter.initialize(containerRef.current, { center, zoom });
     adapterRef.current = adapter;
     setIsReady(true);
     onMapReady?.(adapter);
   }, [center, zoom, onMapReady]);
 
-  // Load SDK and initialize map
+  // Load Kakao SDK and initialize map
   useEffect(() => {
-    if (!hasKey) return;
+    if (!kakaoKey) return;
 
     let cancelled = false;
 
     const loadAndInit = async () => {
       try {
-        if (mapProvider === 'kakao' && kakaoKey) {
-          if (isKakaoReady()) {
-            if (!cancelled) initializeMap('kakao');
-            return;
-          }
-          await loadScript(`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false&libraries=services,clusterer`);
-          if (cancelled) return;
-          if (window.kakao?.maps) {
-            window.kakao.maps.load(() => {
-              if (!cancelled) initializeMap('kakao');
-            });
-          }
-        } else if (mapProvider === 'naver' && naverKey) {
-          if (isNaverReady()) {
-            if (!cancelled) initializeMap('naver');
-            return;
-          }
-          await loadScript(`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${naverKey}`);
-          if (cancelled) return;
-          if (isNaverReady()) {
-            initializeMap('naver');
-          }
+        if (isKakaoReady()) {
+          if (!cancelled) initializeMap();
+          return;
+        }
+        await loadScript(`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false&libraries=services,clusterer`);
+        if (cancelled) return;
+        if (window.kakao?.maps) {
+          window.kakao.maps.load(() => {
+            if (!cancelled) initializeMap();
+          });
         }
       } catch {
         // Script load failed
@@ -115,7 +78,7 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
     return () => {
       cancelled = true;
     };
-  }, [mapProvider, kakaoKey, naverKey, hasKey, initializeMap]);
+  }, [kakaoKey, initializeMap]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -128,7 +91,7 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
     <div className={`relative w-full h-full ${className}`}>
       <div ref={containerRef} className="w-full h-full" />
 
-      {!hasKey && (
+      {!kakaoKey && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
           <div className="text-center space-y-3 max-w-sm px-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -136,13 +99,13 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
             </div>
             <p className="font-semibold">지도 API 키가 설정되지 않았습니다</p>
             <p className="text-sm text-muted-foreground">
-              .env 파일에 {mapProvider === 'kakao' ? 'NEXT_PUBLIC_KAKAO_MAP_KEY' : 'NEXT_PUBLIC_NAVER_MAP_CLIENT_ID'}를 설정해주세요.
+              .env 파일에 NEXT_PUBLIC_KAKAO_MAP_KEY를 설정해주세요.
             </p>
           </div>
         </div>
       )}
 
-      {hasKey && !isReady && (
+      {kakaoKey && !isReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="text-center space-y-2">
             <Skeleton className="h-8 w-32 mx-auto" />

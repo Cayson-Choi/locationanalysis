@@ -108,9 +108,6 @@
     "academies": "Academies",
     "transport": "Transport",
     "population": "Population",
-    "mapProvider": "Map Provider",
-    "kakao": "Kakao Maps",
-    "naver": "Naver Maps",
     "analyze": "Analyze"
   },
   "analysis": {

@@ -1,4 +1,4 @@
-export type MapProvider = 'kakao' | 'naver';
+export type MapProvider = 'kakao';
 
 export interface MapPosition {
   lat: number;
