@@ -8,7 +8,8 @@ const CATEGORY_MAP: Record<string, { code: string; label: string }> = {
   대형마트: { code: 'MT1', label: '대형마트' },
   의료: { code: 'HP8', label: '의료' },
   약국: { code: 'PM9', label: '약국' },
-  교육: { code: 'AC5', label: '교육' },
+  학원: { code: 'AC5', label: '학원' },
+  학교: { code: 'SC4', label: '학교' },
   숙박: { code: 'AD5', label: '숙박' },
   은행: { code: 'BK9', label: '은행' },
 };
