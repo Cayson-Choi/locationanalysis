@@ -40,7 +40,7 @@ export const INDUSTRY_COLORS: Record<string, string> = Object.fromEntries(
 INDUSTRY_COLORS['기타'] = '#6B7280';
 
 // Default enabled categories
-export const DEFAULT_CATEGORIES = ['FD6', 'CE7', 'CS2', 'HP8', 'PM9', 'AC5'];
+export const DEFAULT_CATEGORIES = ['CS2'];
 
 export const FRESHNESS_COLORS = {
   fresh: '#22C55E',
