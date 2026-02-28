@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import Script from 'next/script';
 import { useUIStore } from '@/stores/uiStore';
 import { useMapStore } from '@/stores/mapStore';
 import { KakaoMapAdapter } from '@/lib/map/kakaoAdapter';
@@ -15,6 +14,22 @@ interface MapContainerProps {
   className?: string;
 }
 
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
 export function MapContainer({ onMapReady, className = '' }: MapContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<MapAdapterInterface | null>(null);
@@ -23,16 +38,18 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
   const [sdkLoaded, setSdkLoaded] = useState<MapProvider | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+  const naverKey = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
+  const hasKey = (mapProvider === 'kakao' && !!kakaoKey) || (mapProvider === 'naver' && !!naverKey);
+
   const initializeMap = useCallback(() => {
     if (!containerRef.current) return;
 
-    // Destroy previous adapter if provider changed
     if (adapterRef.current) {
       const currentCenter = adapterRef.current.getCenter();
       const currentZoom = adapterRef.current.getZoom();
       adapterRef.current.destroy();
 
-      // Use previous center/zoom for continuity
       const adapter =
         mapProvider === 'kakao' ? new KakaoMapAdapter() : new NaverMapAdapter();
 
@@ -56,66 +73,73 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
     onMapReady?.(adapter);
   }, [mapProvider, center, zoom, onMapReady]);
 
+  // Load SDK script and initialize map
+  useEffect(() => {
+    if (!hasKey) return;
+
+    let cancelled = false;
+
+    const loadSdk = async () => {
+      try {
+        if (mapProvider === 'kakao' && kakaoKey) {
+          // Check if already available
+          if (window.kakao?.maps) {
+            window.kakao.maps.load(() => {
+              if (!cancelled) setSdkLoaded('kakao');
+            });
+            return;
+          }
+          // Load script
+          await loadScript(`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false&libraries=services,clusterer`);
+          if (cancelled) return;
+          if (window.kakao?.maps) {
+            window.kakao.maps.load(() => {
+              if (!cancelled) setSdkLoaded('kakao');
+            });
+          }
+        } else if (mapProvider === 'naver' && naverKey) {
+          // Check if already available
+          if (window.naver?.maps) {
+            if (!cancelled) setSdkLoaded('naver');
+            return;
+          }
+          // Load script
+          await loadScript(`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${naverKey}`);
+          if (cancelled) return;
+          if (window.naver?.maps) {
+            setSdkLoaded('naver');
+          }
+        }
+      } catch {
+        // Script load failed
+      }
+    };
+
+    loadSdk();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mapProvider, kakaoKey, naverKey, hasKey]);
+
+  // Initialize map when SDK is loaded
   useEffect(() => {
     if (sdkLoaded === mapProvider) {
       initializeMap();
     }
   }, [sdkLoaded, mapProvider, initializeMap]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       adapterRef.current?.destroy();
     };
   }, []);
 
-  const handleSdkLoad = useCallback(() => {
-    if (mapProvider === 'kakao' && window.kakao?.maps) {
-      window.kakao.maps.load(() => {
-        setSdkLoaded('kakao');
-      });
-    } else if (mapProvider === 'naver' && window.naver?.maps) {
-      setSdkLoaded('naver');
-    }
-  }, [mapProvider]);
-
-  // Check if SDK is already loaded (e.g., client-side navigation)
-  useEffect(() => {
-    if (sdkLoaded === mapProvider) return;
-    if (mapProvider === 'kakao' && window.kakao?.maps) {
-      window.kakao.maps.load(() => {
-        setSdkLoaded('kakao');
-      });
-    } else if (mapProvider === 'naver' && window.naver?.maps) {
-      setSdkLoaded('naver');
-    }
-  }, [mapProvider, sdkLoaded]);
-
-  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
-  const naverKey = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
-  const hasKey = (mapProvider === 'kakao' && !!kakaoKey) || (mapProvider === 'naver' && !!naverKey);
-
   return (
     <div className={`relative w-full h-full ${className}`}>
-      {/* Load map SDKs */}
-      {mapProvider === 'kakao' && kakaoKey && (
-        <Script
-          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false&libraries=services,clusterer`}
-          strategy="afterInteractive"
-          onLoad={handleSdkLoad}
-        />
-      )}
-      {mapProvider === 'naver' && naverKey && (
-        <Script
-          src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${naverKey}`}
-          strategy="afterInteractive"
-          onLoad={handleSdkLoad}
-        />
-      )}
-
-      {/* Map container */}
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* No API key configured */}
       {!hasKey && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
           <div className="text-center space-y-3 max-w-sm px-4">
@@ -130,7 +154,6 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
         </div>
       )}
 
-      {/* Loading state (only when key exists but SDK not yet loaded) */}
       {hasKey && !isReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="text-center space-y-2">
