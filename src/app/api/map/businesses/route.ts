@@ -103,55 +103,41 @@ async function searchCategory(
   return all;
 }
 
-// Fetch bus stops from TAGO API
-async function fetchTagoBusStops(
-  tagoKey: string,
+// Fetch bus stops from OpenStreetMap Overpass API (free, full Korea coverage)
+async function fetchBusStops(
   lat: number,
-  lng: number
+  lng: number,
+  radius: number
 ): Promise<BusinessResult[]> {
   try {
-    const base = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList';
-    const params = new URLSearchParams({
-      pageNo: '1',
-      numOfRows: '50',
-      gpsLati: String(lat),
-      gpsLong: String(lng),
-      _type: 'json',
+    const query = `[out:json][timeout:10];node[highway=bus_stop](around:${radius},${lat},${lng});out body;`;
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: `data=${encodeURIComponent(query)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    const fullUrl = `${base}?serviceKey=${tagoKey}&${params.toString()}`;
 
-    const response = await fetch(fullUrl);
-    const text = await response.text();
+    if (!res.ok) return [];
+    const data = await res.json();
 
-    // data.go.kr sometimes returns XML even with _type=json
-    if (!text.startsWith('{') && !text.startsWith('[')) {
-      console.warn('TAGO returned non-JSON:', text.substring(0, 200));
-      return [];
-    }
-
-    const data = JSON.parse(text);
-    const items = data?.response?.body?.items?.item;
-    if (!items) return [];
-    const arr = Array.isArray(items) ? items : [items];
-
-    return arr.map((item: Record<string, unknown>) => ({
-      id: String(item.nodeid || ''),
-      name: String(item.nodenm || ''),
+    return (data.elements ?? []).map((el: { id: number; lat: number; lon: number; tags?: Record<string, string> }) => ({
+      id: String(el.id),
+      name: el.tags?.name || el.tags?.['name:ko'] || '버스정류장',
       branch_name: null,
       large_category: '버스정류장',
       medium_category: '',
       small_category: '',
       address_road: '',
       address_jibun: '',
-      latitude: Number(item.gpslati || 0),
-      longitude: Number(item.gpslong || 0),
+      latitude: el.lat,
+      longitude: el.lon,
       floor: null,
       phone: null,
       is_active: true,
       cached_at: new Date().toISOString(),
     }));
   } catch (e) {
-    console.error('TAGO bus fetch error:', e);
+    console.error('Overpass bus fetch error:', e);
     return [];
   }
 }
@@ -220,13 +206,10 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Fetch bus stops from TAGO if enabled
+    // Fetch bus stops from OpenStreetMap if enabled
     if (busEnabled) {
-      const tagoKey = process.env.TAGO_API_KEY;
-      if (tagoKey) {
-        const busStops = await fetchTagoBusStops(tagoKey, lat, lng);
-        businesses.push(...busStops);
-      }
+      const busStops = await fetchBusStops(lat, lng, radius);
+      businesses.push(...busStops);
     }
 
     return NextResponse.json({
