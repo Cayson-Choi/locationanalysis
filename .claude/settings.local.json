@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.data.go.kr)",
+      "WebFetch(domain:sg.sbiz.or.kr)",
+      "WebFetch(domain:kosis.kr)",
+      "WebFetch(domain:sgis.kostat.go.kr)",
+      "WebFetch(domain:developers.kakao.com)",
+      "WebFetch(domain:sgis.mods.go.kr)",
+      "WebFetch(domain:www.juso.go.kr)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:data.seoul.go.kr)",
+      "WebFetch(domain:www.ncloud.com)",
+      "WebFetch(domain:www.aifreeapi.com)",
+      "WebFetch(domain:open.neis.go.kr)",
+      "WebSearch",
+      "Bash(python3:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(cp:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx next:*)",
+      "Bash(git:*)",
+      "Bash(curl:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(taskkill:*)",
+      "Bash(/d/Antigravity/locationanalysis/take-screenshots.ps1:*)",
+      "Bash(/d/Antigravity/locationanalysis/take-ss.ps1:*)",
+      "Bash(/d/Antigravity/locationanalysis/take-final-ss.ps1:*)",
+      "Bash(/d/Antigravity/locationanalysis/ss.ps1:*)",
+      "Bash(powershell:*)",
+      "Bash(start:*)"
+    ]
+  }
+}
