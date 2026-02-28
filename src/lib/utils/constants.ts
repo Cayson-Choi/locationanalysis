@@ -31,7 +31,6 @@ export const CATEGORY_INFO: Record<string, { label: string; color: string }> = {
   AG2: { label: '중개업소', color: '#84CC16' },
   PO3: { label: '공공기관', color: '#64748B' },
   AT4: { label: '관광명소', color: '#FB923C' },
-  BUS: { label: '버스정류장', color: '#22C55E' },
 };
 
 // label → color map (for marker coloring by large_category)
