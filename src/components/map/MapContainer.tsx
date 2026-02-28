@@ -30,84 +30,79 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
+function isKakaoReady(): boolean {
+  return !!(window.kakao?.maps?.Map);
+}
+
+function isNaverReady(): boolean {
+  return !!(window.naver?.maps?.Map);
+}
+
 export function MapContainer({ onMapReady, className = '' }: MapContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<MapAdapterInterface | null>(null);
   const { mapProvider } = useUIStore();
   const { center, zoom } = useMapStore();
-  const [sdkLoaded, setSdkLoaded] = useState<MapProvider | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const prevProviderRef = useRef<MapProvider>(mapProvider);
 
   const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
   const naverKey = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
   const hasKey = (mapProvider === 'kakao' && !!kakaoKey) || (mapProvider === 'naver' && !!naverKey);
 
-  const initializeMap = useCallback(() => {
-    if (!containerRef.current) return;
-
-    if (adapterRef.current) {
-      const currentCenter = adapterRef.current.getCenter();
-      const currentZoom = adapterRef.current.getZoom();
-      adapterRef.current.destroy();
-
-      const adapter =
-        mapProvider === 'kakao' ? new KakaoMapAdapter() : new NaverMapAdapter();
-
-      adapter.initialize(containerRef.current, {
-        center: currentCenter,
-        zoom: currentZoom,
-      });
-
-      adapterRef.current = adapter;
-      setIsReady(true);
-      onMapReady?.(adapter);
-      return;
+  // Reset when provider changes
+  useEffect(() => {
+    if (prevProviderRef.current !== mapProvider) {
+      prevProviderRef.current = mapProvider;
+      if (adapterRef.current) {
+        adapterRef.current.destroy();
+        adapterRef.current = null;
+      }
+      setIsReady(false);
     }
+  }, [mapProvider]);
+
+  const initializeMap = useCallback((providerToInit: MapProvider) => {
+    if (!containerRef.current || adapterRef.current) return;
 
     const adapter =
-      mapProvider === 'kakao' ? new KakaoMapAdapter() : new NaverMapAdapter();
+      providerToInit === 'kakao' ? new KakaoMapAdapter() : new NaverMapAdapter();
 
     adapter.initialize(containerRef.current, { center, zoom });
     adapterRef.current = adapter;
     setIsReady(true);
     onMapReady?.(adapter);
-  }, [mapProvider, center, zoom, onMapReady]);
+  }, [center, zoom, onMapReady]);
 
-  // Load SDK script and initialize map
+  // Load SDK and initialize map
   useEffect(() => {
     if (!hasKey) return;
 
     let cancelled = false;
 
-    const loadSdk = async () => {
+    const loadAndInit = async () => {
       try {
         if (mapProvider === 'kakao' && kakaoKey) {
-          // Check if already available
-          if (window.kakao?.maps) {
-            window.kakao.maps.load(() => {
-              if (!cancelled) setSdkLoaded('kakao');
-            });
+          if (isKakaoReady()) {
+            if (!cancelled) initializeMap('kakao');
             return;
           }
-          // Load script
           await loadScript(`//dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&autoload=false&libraries=services,clusterer`);
           if (cancelled) return;
           if (window.kakao?.maps) {
             window.kakao.maps.load(() => {
-              if (!cancelled) setSdkLoaded('kakao');
+              if (!cancelled) initializeMap('kakao');
             });
           }
         } else if (mapProvider === 'naver' && naverKey) {
-          // Check if already available
-          if (window.naver?.maps) {
-            if (!cancelled) setSdkLoaded('naver');
+          if (isNaverReady()) {
+            if (!cancelled) initializeMap('naver');
             return;
           }
-          // Load script
           await loadScript(`https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${naverKey}`);
           if (cancelled) return;
-          if (window.naver?.maps) {
-            setSdkLoaded('naver');
+          if (isNaverReady()) {
+            initializeMap('naver');
           }
         }
       } catch {
@@ -115,19 +110,12 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
       }
     };
 
-    loadSdk();
+    loadAndInit();
 
     return () => {
       cancelled = true;
     };
-  }, [mapProvider, kakaoKey, naverKey, hasKey]);
-
-  // Initialize map when SDK is loaded
-  useEffect(() => {
-    if (sdkLoaded === mapProvider) {
-      initializeMap();
-    }
-  }, [sdkLoaded, mapProvider, initializeMap]);
+  }, [mapProvider, kakaoKey, naverKey, hasKey, initializeMap]);
 
   // Cleanup on unmount
   useEffect(() => {
