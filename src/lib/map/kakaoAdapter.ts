@@ -16,6 +16,7 @@ declare global {
         Circle: new (options: Record<string, unknown>) => KakaoCircle;
         Polygon: new (options: Record<string, unknown>) => KakaoPolygon;
         MarkerClusterer: new (options: Record<string, unknown>) => KakaoClusterer;
+        InfoWindow: new (options: Record<string, unknown>) => KakaoInfoWindow;
         event: {
           addListener: (target: unknown, type: string, handler: (...args: unknown[]) => void) => void;
           removeListener: (target: unknown, type: string, handler: (...args: unknown[]) => void) => void;
@@ -64,6 +65,12 @@ interface KakaoClusterer {
   setMap: (map: KakaoMap | null) => void;
 }
 
+interface KakaoInfoWindow {
+  open: (map: KakaoMap, marker: KakaoMarker) => void;
+  close: () => void;
+  setContent: (content: string) => void;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface KakaoMarkerImage {}
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -88,6 +95,7 @@ export class KakaoMapAdapter implements MapAdapterInterface {
   private polygons = new Map<string, KakaoPolygon>();
   private clusterer: KakaoClusterer | null = null;
   private eventHandlers = new Map<string, (...args: unknown[]) => void>();
+  private infoWindow: KakaoInfoWindow | null = null;
 
   initialize(container: HTMLElement, options: { center: MapPosition; zoom: number }): void {
     const { kakao } = window;
@@ -140,13 +148,33 @@ export class KakaoMapAdapter implements MapAdapterInterface {
 
     const marker = new kakao.maps.Marker(markerOpts);
 
-    if (options.clickable !== false && options.data) {
+    if (options.clickable !== false) {
       kakao.maps.event.addListener(marker, 'click', () => {
-        this.eventHandlers.get('markerClick')?.({
-          markerId: id,
-          position: options.position,
-          data: options.data,
-        });
+        // Show info window with business name
+        if (this.map && (options.title || options.data)) {
+          if (this.infoWindow) {
+            this.infoWindow.close();
+          }
+          const data = options.data as Record<string, unknown> | undefined;
+          const name = options.title || '';
+          const category = data?.large_category ? `<span style="color:#888;font-size:11px">${data.large_category}</span>` : '';
+          const address = data?.address_road ? `<p style="color:#666;font-size:11px;margin:2px 0 0">${data.address_road}</p>` : '';
+          const phone = data?.phone ? `<p style="color:#666;font-size:11px;margin:2px 0 0">${data.phone}</p>` : '';
+
+          this.infoWindow = new kakao.maps.InfoWindow({
+            content: `<div style="padding:8px 12px;min-width:150px;max-width:250px;font-size:13px;line-height:1.4"><strong>${name}</strong> ${category}${address}${phone}</div>`,
+            removable: true,
+          });
+          this.infoWindow.open(this.map, marker);
+        }
+
+        if (options.data) {
+          this.eventHandlers.get('markerClick')?.({
+            markerId: id,
+            position: options.position,
+            data: options.data,
+          });
+        }
       });
     }
 
