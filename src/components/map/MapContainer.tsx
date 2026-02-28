@@ -78,6 +78,18 @@ export function MapContainer({ onMapReady, className = '' }: MapContainerProps) 
     }
   }, [mapProvider]);
 
+  // Check if SDK is already loaded (e.g., client-side navigation)
+  useEffect(() => {
+    if (sdkLoaded === mapProvider) return;
+    if (mapProvider === 'kakao' && window.kakao?.maps) {
+      window.kakao.maps.load(() => {
+        setSdkLoaded('kakao');
+      });
+    } else if (mapProvider === 'naver' && window.naver?.maps) {
+      setSdkLoaded('naver');
+    }
+  }, [mapProvider, sdkLoaded]);
+
   const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
   const naverKey = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
   const hasKey = (mapProvider === 'kakao' && !!kakaoKey) || (mapProvider === 'naver' && !!naverKey);
