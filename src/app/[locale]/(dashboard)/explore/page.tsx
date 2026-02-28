@@ -29,10 +29,9 @@ export default function ExplorePage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [adapter, setAdapter] = useState<MapAdapterInterface | null>(null);
-  const { setSelectedLocation, setCenter, radius, enabledCategories } = useMapStore();
+  const { selectedLocation, setSelectedLocation, setCenter, radius, enabledCategories } = useMapStore();
   const debouncedQuery = useDebounce(searchQuery, 300);
   const skipSearchRef = useRef(false);
-  const lastFetchRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // Search address via Kakao API
   const searchAddress = useCallback(async (query: string) => {
@@ -64,44 +63,43 @@ export default function ExplorePage() {
     }
   }, [debouncedQuery, searchAddress]);
 
-  // Fetch businesses
-  const fetchBusinesses = useCallback(async (lat: number, lng: number, r: number, categories: string[]) => {
-    if (categories.length === 0) {
+  // Single effect: fetch businesses whenever location, radius, or categories change
+  useEffect(() => {
+    if (!selectedLocation || enabledCategories.length === 0) {
       setBusinesses([]);
       return;
     }
-    try {
-      const cats = categories.join(',');
-      const res = await fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${r}&categories=${cats}`);
-      const data = await res.json();
-      if (data.success) {
-        setBusinesses(data.data);
-      }
-    } catch {
-      // Ignore fetch errors
-    }
-  }, []);
 
-  // Re-fetch when categories change (if a location was already selected)
-  useEffect(() => {
-    if (lastFetchRef.current) {
-      const { lat, lng } = lastFetchRef.current;
-      fetchBusinesses(lat, lng, radius, enabledCategories);
-    }
-  }, [enabledCategories, radius, fetchBusinesses]);
+    let cancelled = false;
+    const { lat, lng } = selectedLocation;
+    const cats = enabledCategories.join(',');
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${radius}&categories=${cats}`);
+        const data = await res.json();
+        if (!cancelled && data.success) {
+          setBusinesses(data.data);
+        }
+      } catch {
+        // Ignore fetch errors
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedLocation, radius, enabledCategories]);
 
   const handleMapReady = useCallback((mapAdapter: MapAdapterInterface) => {
     setAdapter(mapAdapter);
 
     mapAdapter.addEventListener('click', (e) => {
       if (e.position) {
-        setSelectedLocation(e.position);
-        setCenter(e.position);
-        lastFetchRef.current = { lat: e.position.lat, lng: e.position.lng };
-        fetchBusinesses(e.position.lat, e.position.lng, radius, useMapStore.getState().enabledCategories);
+        const store = useMapStore.getState();
+        store.setSelectedLocation(e.position);
+        store.setCenter(e.position);
       }
     });
-  }, [setSelectedLocation, setCenter, fetchBusinesses, radius]);
+  }, []);
 
   const handleAddressSelect = (result: SearchResult) => {
     skipSearchRef.current = true;
@@ -112,16 +110,12 @@ export default function ExplorePage() {
     setCenter(pos);
     setSelectedLocation(pos);
     adapter?.setCenter(result.lat, result.lng);
-    lastFetchRef.current = { lat: result.lat, lng: result.lng };
-    fetchBusinesses(result.lat, result.lng, radius, enabledCategories);
   };
 
   const handleMyLocation = (lat: number, lng: number) => {
     setCenter({ lat, lng });
     setSelectedLocation({ lat, lng });
     adapter?.setCenter(lat, lng);
-    lastFetchRef.current = { lat, lng };
-    fetchBusinesses(lat, lng, radius, enabledCategories);
   };
 
   return (
