@@ -4,9 +4,13 @@ import { NextRequest, NextResponse } from 'next/server';
 const CATEGORY_MAP: Record<string, { code: string; label: string }> = {
   음식점: { code: 'FD6', label: '음식점' },
   카페: { code: 'CE7', label: '카페' },
-  소매업: { code: 'CS2', label: '소매업' },  // 편의점
-  의료: { code: 'HP8', label: '의료' },       // 병원
-  교육: { code: 'AC5', label: '교육' },       // 학원
+  편의점: { code: 'CS2', label: '편의점' },
+  대형마트: { code: 'MT1', label: '대형마트' },
+  의료: { code: 'HP8', label: '의료' },
+  약국: { code: 'PM9', label: '약국' },
+  교육: { code: 'AC5', label: '교육' },
+  숙박: { code: 'AD5', label: '숙박' },
+  은행: { code: 'BK9', label: '은행' },
 };
 
 interface KakaoDocument {

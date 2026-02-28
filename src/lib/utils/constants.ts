@@ -14,12 +14,13 @@ export const DEBOUNCE_MS = 300;
 export const INDUSTRY_COLORS: Record<string, string> = {
   음식점: '#EF4444',
   카페: '#8B5CF6',
-  소매업: '#3B82F6',
-  서비스업: '#10B981',
+  편의점: '#3B82F6',
+  대형마트: '#0EA5E9',
   의료: '#F59E0B',
+  약국: '#F97316',
   교육: '#EC4899',
   숙박: '#6366F1',
-  스포츠: '#14B8A6',
+  은행: '#10B981',
   기타: '#6B7280',
 };
 
