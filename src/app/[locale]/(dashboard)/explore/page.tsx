@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Search } from 'lucide-react';
+import { toast } from 'sonner';
+import { DEFAULT_CENTER } from '@/lib/utils/constants';
 import { Input } from '@/components/ui/input';
 import { MapContainer } from '@/components/map/MapContainer';
 import { MapControls } from '@/components/map/MapControls';
@@ -29,9 +31,49 @@ export default function ExplorePage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [adapter, setAdapter] = useState<MapAdapterInterface | null>(null);
+  const adapterRef = useRef<MapAdapterInterface | null>(null);
   const { selectedLocation, setSelectedLocation, setCenter, radius, enabledCategories } = useMapStore();
   const debouncedQuery = useDebounce(searchQuery, 300);
   const skipSearchRef = useRef(false);
+  const geoInitRef = useRef(false);
+
+  // Auto-detect current location on mount, fallback to Seoul City Hall
+  useEffect(() => {
+    if (geoInitRef.current) return;
+    geoInitRef.current = true;
+
+    if (!navigator.geolocation) {
+      const pos = { lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng };
+      setCenter(pos);
+      setSelectedLocation(pos);
+      adapter?.setCenter(pos.lat, pos.lng);
+      return;
+    }
+
+    toast.loading('현재 위치를 찾고 있습니다...', { id: 'geo-init' });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const pos = { lat: position.coords.latitude, lng: position.coords.longitude };
+        const store = useMapStore.getState();
+        store.setCenter(pos);
+        store.setSelectedLocation(pos);
+        // Move map if adapter is ready
+        const currentAdapter = adapterRef.current;
+        if (currentAdapter) currentAdapter.setCenter(pos.lat, pos.lng);
+        toast.success('현재 위치로 이동했습니다', { id: 'geo-init', duration: 2000 });
+      },
+      () => {
+        // Fallback to Seoul City Hall
+        const pos = { lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng };
+        const store = useMapStore.getState();
+        store.setCenter(pos);
+        store.setSelectedLocation(pos);
+        toast.dismiss('geo-init');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  }, []);
 
   // Search address via Kakao API
   const searchAddress = useCallback(async (query: string) => {
@@ -91,6 +133,7 @@ export default function ExplorePage() {
 
   const handleMapReady = useCallback((mapAdapter: MapAdapterInterface) => {
     setAdapter(mapAdapter);
+    adapterRef.current = mapAdapter;
 
     mapAdapter.addEventListener('click', (e) => {
       if (e.position) {
