@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Locate, Layers, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,10 +22,22 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
   const isMobile = useIsMobile();
   const { getCurrentPosition, lat, lng, loading } = useGeolocation();
   const { radius, setRadius, layers, toggleLayer } = useMapStore();
+  const pendingLocationRef = useRef(false);
+
+  // When lat/lng arrive after getCurrentPosition, fire the callback
+  useEffect(() => {
+    if (pendingLocationRef.current && lat && lng) {
+      pendingLocationRef.current = false;
+      onMyLocation?.(lat, lng);
+    }
+  }, [lat, lng, onMyLocation]);
 
   const handleMyLocation = () => {
+    pendingLocationRef.current = true;
     getCurrentPosition();
+    // If already cached, fire immediately
     if (lat && lng) {
+      pendingLocationRef.current = false;
       onMyLocation?.(lat, lng);
     }
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -14,16 +14,26 @@ import { useDebounce } from '@/hooks/useDebounce';
 import type { MapAdapterInterface } from '@/lib/map/mapAdapter';
 import type { Business } from '@/types/business';
 
+interface SearchResult {
+  roadAddr: string;
+  jibunAddr: string;
+  placeName?: string;
+  lat: number;
+  lng: number;
+  category?: string;
+}
+
 export default function ExplorePage() {
   const t = useTranslations('explore');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Array<{ roadAddr: string; jibunAddr: string }>>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [adapter, setAdapter] = useState<MapAdapterInterface | null>(null);
-  const { selectedLocation, setSelectedLocation, setCenter, radius, layers } = useMapStore();
+  const { setSelectedLocation, setCenter, radius, layers } = useMapStore();
   const debouncedQuery = useDebounce(searchQuery, 300);
+  const skipSearchRef = useRef(false);
 
-  // Search address
+  // Search address via Kakao API
   const searchAddress = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSearchResults([]);
@@ -39,6 +49,19 @@ export default function ExplorePage() {
       // Ignore search errors
     }
   }, []);
+
+  // Auto-search when debounced query changes
+  useEffect(() => {
+    if (skipSearchRef.current) {
+      skipSearchRef.current = false;
+      return;
+    }
+    if (debouncedQuery.length >= 2) {
+      searchAddress(debouncedQuery);
+    } else {
+      setSearchResults([]);
+    }
+  }, [debouncedQuery, searchAddress]);
 
   // Fetch businesses when location changes
   const fetchBusinesses = useCallback(async (lat: number, lng: number, r: number) => {
@@ -65,17 +88,16 @@ export default function ExplorePage() {
     });
   }, [setSelectedLocation, setCenter, fetchBusinesses, radius]);
 
-  const handleAddressSelect = async (address: string) => {
-    setSearchQuery(address);
+  const handleAddressSelect = (result: SearchResult) => {
+    skipSearchRef.current = true;
+    setSearchQuery(result.placeName || result.roadAddr);
     setSearchResults([]);
 
-    // Geocode the address using Kakao API
-    try {
-      const res = await fetch(`/api/address/search?keyword=${encodeURIComponent(address)}`);
-      // For now, just center the map — actual geocoding needs Kakao/Naver API
-    } catch {
-      // Ignore
-    }
+    const pos = { lat: result.lat, lng: result.lng };
+    setCenter(pos);
+    setSelectedLocation(pos);
+    adapter?.setCenter(result.lat, result.lng);
+    fetchBusinesses(result.lat, result.lng, radius);
   };
 
   const handleMyLocation = (lat: number, lng: number) => {
@@ -84,11 +106,6 @@ export default function ExplorePage() {
     adapter?.setCenter(lat, lng);
     fetchBusinesses(lat, lng, radius);
   };
-
-  // Auto-search when debounced query changes
-  if (debouncedQuery.length >= 2) {
-    searchAddress(debouncedQuery);
-  }
 
   return (
     <div className="relative -mx-4 -my-4 sm:-mx-6 lg:-mx-8 h-[calc(100dvh-3.5rem-4rem)] xl:h-[calc(100dvh-3.5rem)]">
@@ -108,10 +125,17 @@ export default function ExplorePage() {
                 <button
                   key={i}
                   className="w-full px-3 py-2 text-left text-sm hover:bg-muted transition-colors"
-                  onClick={() => handleAddressSelect(result.roadAddr)}
+                  onClick={() => handleAddressSelect(result)}
                 >
-                  <p className="font-medium">{result.roadAddr}</p>
-                  <p className="text-xs text-muted-foreground">{result.jibunAddr}</p>
+                  {result.placeName && (
+                    <p className="font-medium">{result.placeName}</p>
+                  )}
+                  <p className={result.placeName ? 'text-xs text-muted-foreground' : 'font-medium'}>
+                    {result.roadAddr}
+                  </p>
+                  {result.roadAddr !== result.jibunAddr && (
+                    <p className="text-xs text-muted-foreground">{result.jibunAddr}</p>
+                  )}
                 </button>
               ))}
             </div>
