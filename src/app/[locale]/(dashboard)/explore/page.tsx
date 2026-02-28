@@ -63,7 +63,7 @@ export default function ExplorePage() {
     }
   }, [debouncedQuery, searchAddress]);
 
-  // Single effect: fetch businesses whenever location, radius, or categories change
+  // Single effect: fetch businesses + transport whenever location, radius, or categories change
   useEffect(() => {
     if (!selectedLocation || enabledCategories.length === 0) {
       setBusinesses([]);
@@ -72,14 +72,56 @@ export default function ExplorePage() {
 
     let cancelled = false;
     const { lat, lng } = selectedLocation;
-    const cats = enabledCategories.join(',');
+
+    // Separate BUS from Kakao categories
+    const kakaoCats = enabledCategories.filter((c) => c !== 'BUS');
+    const busEnabled = enabledCategories.includes('BUS');
 
     (async () => {
       try {
-        const res = await fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${radius}&categories=${cats}`);
-        const data = await res.json();
-        if (!cancelled && data.success) {
-          setBusinesses(data.data);
+        const promises: Promise<Business[]>[] = [];
+
+        // Fetch Kakao category businesses
+        if (kakaoCats.length > 0) {
+          promises.push(
+            fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${radius}&categories=${kakaoCats.join(',')}`)
+              .then((r) => r.json())
+              .then((d) => (d.success ? d.data : []))
+          );
+        }
+
+        // Fetch bus stops from TAGO
+        if (busEnabled) {
+          promises.push(
+            fetch(`/api/map/transport?lat=${lat}&lng=${lng}&radius=${radius}`)
+              .then((r) => r.json())
+              .then((d) => {
+                if (!d.success) return [];
+                return (d.data as { name: string; type: string; latitude: number; longitude: number; nodeId: string }[])
+                  .filter((stop) => stop.type === 'bus')
+                  .map((stop) => ({
+                    id: stop.nodeId,
+                    name: stop.name,
+                    branch_name: null,
+                    large_category: '버스정류장',
+                    medium_category: '',
+                    small_category: '',
+                    address_road: '',
+                    address_jibun: '',
+                    latitude: stop.latitude,
+                    longitude: stop.longitude,
+                    floor: null,
+                    phone: null,
+                    is_active: true,
+                    cached_at: new Date().toISOString(),
+                  }));
+              })
+          );
+        }
+
+        const results = await Promise.all(promises);
+        if (!cancelled) {
+          setBusinesses(results.flat());
         }
       } catch {
         // Ignore fetch errors
