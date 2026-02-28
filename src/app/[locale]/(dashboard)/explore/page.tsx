@@ -29,9 +29,10 @@ export default function ExplorePage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [adapter, setAdapter] = useState<MapAdapterInterface | null>(null);
-  const { setSelectedLocation, setCenter, radius, layers } = useMapStore();
+  const { setSelectedLocation, setCenter, radius, enabledCategories } = useMapStore();
   const debouncedQuery = useDebounce(searchQuery, 300);
   const skipSearchRef = useRef(false);
+  const lastFetchRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // Search address via Kakao API
   const searchAddress = useCallback(async (query: string) => {
@@ -63,10 +64,15 @@ export default function ExplorePage() {
     }
   }, [debouncedQuery, searchAddress]);
 
-  // Fetch businesses when location changes
-  const fetchBusinesses = useCallback(async (lat: number, lng: number, r: number) => {
+  // Fetch businesses
+  const fetchBusinesses = useCallback(async (lat: number, lng: number, r: number, categories: string[]) => {
+    if (categories.length === 0) {
+      setBusinesses([]);
+      return;
+    }
     try {
-      const res = await fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${r}`);
+      const cats = categories.join(',');
+      const res = await fetch(`/api/map/businesses?lat=${lat}&lng=${lng}&radius=${r}&categories=${cats}`);
       const data = await res.json();
       if (data.success) {
         setBusinesses(data.data);
@@ -76,6 +82,14 @@ export default function ExplorePage() {
     }
   }, []);
 
+  // Re-fetch when categories change (if a location was already selected)
+  useEffect(() => {
+    if (lastFetchRef.current) {
+      const { lat, lng } = lastFetchRef.current;
+      fetchBusinesses(lat, lng, radius, enabledCategories);
+    }
+  }, [enabledCategories, radius, fetchBusinesses]);
+
   const handleMapReady = useCallback((mapAdapter: MapAdapterInterface) => {
     setAdapter(mapAdapter);
 
@@ -83,7 +97,8 @@ export default function ExplorePage() {
       if (e.position) {
         setSelectedLocation(e.position);
         setCenter(e.position);
-        fetchBusinesses(e.position.lat, e.position.lng, radius);
+        lastFetchRef.current = { lat: e.position.lat, lng: e.position.lng };
+        fetchBusinesses(e.position.lat, e.position.lng, radius, useMapStore.getState().enabledCategories);
       }
     });
   }, [setSelectedLocation, setCenter, fetchBusinesses, radius]);
@@ -97,14 +112,16 @@ export default function ExplorePage() {
     setCenter(pos);
     setSelectedLocation(pos);
     adapter?.setCenter(result.lat, result.lng);
-    fetchBusinesses(result.lat, result.lng, radius);
+    lastFetchRef.current = { lat: result.lat, lng: result.lng };
+    fetchBusinesses(result.lat, result.lng, radius, enabledCategories);
   };
 
   const handleMyLocation = (lat: number, lng: number) => {
     setCenter({ lat, lng });
     setSelectedLocation({ lat, lng });
     adapter?.setCenter(lat, lng);
-    fetchBusinesses(lat, lng, radius);
+    lastFetchRef.current = { lat, lng };
+    fetchBusinesses(lat, lng, radius, enabledCategories);
   };
 
   return (
@@ -151,12 +168,12 @@ export default function ExplorePage() {
       <BusinessMarkers
         adapter={adapter}
         businesses={businesses}
-        visible={layers.businesses}
+        visible={enabledCategories.length > 0}
       />
 
       {/* Controls */}
       <MapControls onMyLocation={handleMyLocation} />
-      <MapLegend visible={layers.businesses && businesses.length > 0} />
+      <MapLegend visible={businesses.length > 0} />
     </div>
   );
 }

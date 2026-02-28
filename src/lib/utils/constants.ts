@@ -11,19 +11,36 @@ export const RADIUS_STEP = 100;
 
 export const DEBOUNCE_MS = 300;
 
-export const INDUSTRY_COLORS: Record<string, string> = {
-  음식점: '#EF4444',
-  카페: '#8B5CF6',
-  편의점: '#3B82F6',
-  대형마트: '#0EA5E9',
-  의료: '#F59E0B',
-  약국: '#F97316',
-  학원: '#EC4899',
-  학교: '#A855F7',
-  숙박: '#6366F1',
-  은행: '#10B981',
-  기타: '#6B7280',
+// Kakao category code → label + color
+export const CATEGORY_INFO: Record<string, { label: string; color: string }> = {
+  FD6: { label: '음식점', color: '#EF4444' },
+  CE7: { label: '카페', color: '#8B5CF6' },
+  CS2: { label: '편의점', color: '#3B82F6' },
+  MT1: { label: '대형마트', color: '#0EA5E9' },
+  HP8: { label: '병원', color: '#F59E0B' },
+  PM9: { label: '약국', color: '#F97316' },
+  AC5: { label: '학원', color: '#EC4899' },
+  SC4: { label: '학교', color: '#A855F7' },
+  AD5: { label: '숙박', color: '#6366F1' },
+  BK9: { label: '은행', color: '#10B981' },
+  PS3: { label: '어린이집', color: '#F472B6' },
+  PK6: { label: '주차장', color: '#94A3B8' },
+  OL7: { label: '주유소', color: '#78716C' },
+  SW8: { label: '지하철역', color: '#06B6D4' },
+  CT1: { label: '문화시설', color: '#D946EF' },
+  AG2: { label: '중개업소', color: '#84CC16' },
+  PO3: { label: '공공기관', color: '#64748B' },
+  AT4: { label: '관광명소', color: '#FB923C' },
 };
+
+// label → color map (for marker coloring by large_category)
+export const INDUSTRY_COLORS: Record<string, string> = Object.fromEntries(
+  Object.values(CATEGORY_INFO).map((v) => [v.label, v.color])
+);
+INDUSTRY_COLORS['기타'] = '#6B7280';
+
+// Default enabled categories
+export const DEFAULT_CATEGORIES = ['FD6', 'CE7', 'CS2', 'HP8', 'PM9', 'AC5'];
 
 export const FRESHNESS_COLORS = {
   fresh: '#22C55E',

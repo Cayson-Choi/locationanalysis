@@ -1,17 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Kakao category codes → our industry categories
-const CATEGORY_MAP: Record<string, { code: string; label: string }> = {
-  음식점: { code: 'FD6', label: '음식점' },
-  카페: { code: 'CE7', label: '카페' },
-  편의점: { code: 'CS2', label: '편의점' },
-  대형마트: { code: 'MT1', label: '대형마트' },
-  의료: { code: 'HP8', label: '의료' },
-  약국: { code: 'PM9', label: '약국' },
-  학원: { code: 'AC5', label: '학원' },
-  학교: { code: 'SC4', label: '학교' },
-  숙박: { code: 'AD5', label: '숙박' },
-  은행: { code: 'BK9', label: '은행' },
+// All Kakao category group codes
+const CATEGORY_MAP: Record<string, string> = {
+  MT1: '대형마트',
+  CS2: '편의점',
+  PS3: '어린이집',
+  SC4: '학교',
+  AC5: '학원',
+  PK6: '주차장',
+  OL7: '주유소',
+  SW8: '지하철역',
+  BK9: '은행',
+  CT1: '문화시설',
+  AG2: '중개업소',
+  PO3: '공공기관',
+  AT4: '관광명소',
+  AD5: '숙박',
+  FD6: '음식점',
+  CE7: '카페',
+  HP8: '병원',
+  PM9: '약국',
 };
 
 interface KakaoDocument {
@@ -64,7 +72,7 @@ async function searchCategory(
   radius: number
 ): Promise<KakaoDocument[]> {
   const all: KakaoDocument[] = [];
-  const maxPages = 3; // up to 45 results per category
+  const maxPages = 3;
 
   for (let page = 1; page <= maxPages; page++) {
     const { documents, is_end } = await searchCategoryPage(kakaoKey, categoryCode, lng, lat, radius, page);
@@ -75,17 +83,12 @@ async function searchCategory(
   return all;
 }
 
-// Reverse map: kakao code → our label
-const CODE_TO_LABEL: Record<string, string> = {};
-for (const [, v] of Object.entries(CATEGORY_MAP)) {
-  CODE_TO_LABEL[v.code] = v.label;
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const lat = parseFloat(searchParams.get('lat') || '');
   const lng = parseFloat(searchParams.get('lng') || '');
   const radius = Math.min(parseInt(searchParams.get('radius') || '500'), 2000);
+  const categories = searchParams.get('categories'); // comma-separated codes e.g. "FD6,CE7,HP8"
 
   if (isNaN(lat) || isNaN(lng)) {
     return NextResponse.json(
@@ -102,17 +105,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Default: main categories. If specified, use only those.
+  const defaultCodes = ['FD6', 'CE7', 'CS2', 'HP8', 'PM9', 'AC5'];
+  const codes = categories
+    ? categories.split(',').filter((c) => c in CATEGORY_MAP)
+    : defaultCodes;
+
   try {
-    // Search all categories in parallel
-    const categories = Object.values(CATEGORY_MAP);
     const results = await Promise.all(
-      categories.map((cat) => searchCategory(kakaoKey, cat.code, lng, lat, radius))
+      codes.map((code) => searchCategory(kakaoKey, code, lng, lat, radius))
     );
 
     const businesses = results.flatMap((docs) =>
       docs.map((doc) => {
-        const largeCategory = CODE_TO_LABEL[doc.category_group_code] || '기타';
-        // Extract medium category from category_name (e.g. "음식점 > 한식 > 국밥")
+        const largeCategory = CATEGORY_MAP[doc.category_group_code] || '기타';
         const categoryParts = doc.category_name.split(' > ');
         const mediumCategory = categoryParts[1] || '';
         const smallCategory = categoryParts[2] || '';
