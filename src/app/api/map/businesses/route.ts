@@ -22,6 +22,35 @@ interface KakaoDocument {
   y: string;
 }
 
+async function searchCategoryPage(
+  kakaoKey: string,
+  categoryCode: string,
+  lng: number,
+  lat: number,
+  radius: number,
+  page: number
+): Promise<{ documents: KakaoDocument[]; is_end: boolean }> {
+  const url = new URL('https://dapi.kakao.com/v2/local/search/category.json');
+  url.searchParams.set('category_group_code', categoryCode);
+  url.searchParams.set('x', String(lng));
+  url.searchParams.set('y', String(lat));
+  url.searchParams.set('radius', String(radius));
+  url.searchParams.set('size', '15');
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('sort', 'distance');
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `KakaoAK ${kakaoKey}` },
+  });
+
+  if (!res.ok) return { documents: [], is_end: true };
+  const data = await res.json();
+  return {
+    documents: data.documents ?? [],
+    is_end: data.meta?.is_end ?? true,
+  };
+}
+
 async function searchCategory(
   kakaoKey: string,
   categoryCode: string,
@@ -29,21 +58,16 @@ async function searchCategory(
   lat: number,
   radius: number
 ): Promise<KakaoDocument[]> {
-  const url = new URL('https://dapi.kakao.com/v2/local/search/category.json');
-  url.searchParams.set('category_group_code', categoryCode);
-  url.searchParams.set('x', String(lng));
-  url.searchParams.set('y', String(lat));
-  url.searchParams.set('radius', String(radius));
-  url.searchParams.set('size', '15');
-  url.searchParams.set('sort', 'distance');
+  const all: KakaoDocument[] = [];
+  const maxPages = 3; // up to 45 results per category
 
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `KakaoAK ${kakaoKey}` },
-  });
+  for (let page = 1; page <= maxPages; page++) {
+    const { documents, is_end } = await searchCategoryPage(kakaoKey, categoryCode, lng, lat, radius, page);
+    all.push(...documents);
+    if (is_end || documents.length === 0) break;
+  }
 
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.documents ?? [];
+  return all;
 }
 
 // Reverse map: kakao code → our label
