@@ -1,10 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Kakao category codes → our industry categories
+const CATEGORY_MAP: Record<string, { code: string; label: string }> = {
+  음식점: { code: 'FD6', label: '음식점' },
+  카페: { code: 'CE7', label: '카페' },
+  소매업: { code: 'CS2', label: '소매업' },  // 편의점
+  의료: { code: 'HP8', label: '의료' },       // 병원
+  교육: { code: 'AC5', label: '교육' },       // 학원
+};
+
+interface KakaoDocument {
+  id: string;
+  place_name: string;
+  category_group_code: string;
+  category_group_name: string;
+  category_name: string;
+  road_address_name: string;
+  address_name: string;
+  phone: string;
+  x: string;
+  y: string;
+}
+
+async function searchCategory(
+  kakaoKey: string,
+  categoryCode: string,
+  lng: number,
+  lat: number,
+  radius: number
+): Promise<KakaoDocument[]> {
+  const url = new URL('https://dapi.kakao.com/v2/local/search/category.json');
+  url.searchParams.set('category_group_code', categoryCode);
+  url.searchParams.set('x', String(lng));
+  url.searchParams.set('y', String(lat));
+  url.searchParams.set('radius', String(radius));
+  url.searchParams.set('size', '15');
+  url.searchParams.set('sort', 'distance');
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `KakaoAK ${kakaoKey}` },
+  });
+
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.documents ?? [];
+}
+
+// Reverse map: kakao code → our label
+const CODE_TO_LABEL: Record<string, string> = {};
+for (const [, v] of Object.entries(CATEGORY_MAP)) {
+  CODE_TO_LABEL[v.code] = v.label;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const lat = parseFloat(searchParams.get('lat') || '');
   const lng = parseFloat(searchParams.get('lng') || '');
-  const radius = parseInt(searchParams.get('radius') || '500');
+  const radius = Math.min(parseInt(searchParams.get('radius') || '500'), 2000);
 
   if (isNaN(lat) || isNaN(lng)) {
     return NextResponse.json(
@@ -13,54 +65,52 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const apiKey = process.env.SOGIS_API_KEY;
-  if (!apiKey) {
+  const kakaoKey = process.env.KAKAO_REST_API_KEY;
+  if (!kakaoKey) {
     return NextResponse.json(
-      { success: false, error: 'SOGIS API key not configured' },
+      { success: false, error: 'Kakao REST API key not configured' },
       { status: 500 }
     );
   }
 
   try {
-    // TODO: Check cache_coverage first with PostGIS ST_Covers
-    // For now, call API directly
+    // Search all categories in parallel
+    const categories = Object.values(CATEGORY_MAP);
+    const results = await Promise.all(
+      categories.map((cat) => searchCategory(kakaoKey, cat.code, lng, lat, radius))
+    );
 
-    const url = new URL('https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius');
-    url.searchParams.set('serviceKey', apiKey);
-    url.searchParams.set('pageNo', '1');
-    url.searchParams.set('numOfRows', '200');
-    url.searchParams.set('radius', String(radius));
-    url.searchParams.set('cx', String(lng));
-    url.searchParams.set('cy', String(lat));
-    url.searchParams.set('type', 'json');
+    const businesses = results.flatMap((docs) =>
+      docs.map((doc) => {
+        const largeCategory = CODE_TO_LABEL[doc.category_group_code] || '기타';
+        // Extract medium category from category_name (e.g. "음식점 > 한식 > 국밥")
+        const categoryParts = doc.category_name.split(' > ');
+        const mediumCategory = categoryParts[1] || '';
+        const smallCategory = categoryParts[2] || '';
 
-    const response = await fetch(url.toString());
-    const data = await response.json();
-
-    const items = data?.body?.items ?? [];
-    const businesses = items.map((item: Record<string, unknown>) => ({
-      id: String(item.bizesId || ''),
-      name: String(item.bizesNm || ''),
-      branch_name: item.brchNm || null,
-      large_category: String(item.indsLclsNm || ''),
-      medium_category: String(item.indsMclsNm || ''),
-      small_category: String(item.indsSclsNm || ''),
-      address_road: String(item.rdnmAdr || ''),
-      address_jibun: String(item.lnoAdr || ''),
-      latitude: Number(item.lat || 0),
-      longitude: Number(item.lon || 0),
-      floor: item.flrNo || null,
-      phone: item.telNo || null,
-      is_active: true,
-      cached_at: new Date().toISOString(),
-    }));
-
-    // TODO: Save to cache_businesses and cache_coverage
+        return {
+          id: doc.id,
+          name: doc.place_name,
+          branch_name: null,
+          large_category: largeCategory,
+          medium_category: mediumCategory,
+          small_category: smallCategory,
+          address_road: doc.road_address_name,
+          address_jibun: doc.address_name,
+          latitude: parseFloat(doc.y),
+          longitude: parseFloat(doc.x),
+          floor: null,
+          phone: doc.phone || null,
+          is_active: true,
+          cached_at: new Date().toISOString(),
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
       data: businesses,
-      total: data?.body?.totalCount ?? businesses.length,
+      total: businesses.length,
     });
   } catch (error) {
     console.error('Business API error:', error);

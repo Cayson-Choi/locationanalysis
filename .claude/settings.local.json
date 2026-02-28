@@ -31,7 +31,8 @@
       "Bash(/d/Antigravity/locationanalysis/ss.ps1:*)",
       "Bash(powershell:*)",
       "Bash(start:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(vercel:*)"
     ]
   }
 }
