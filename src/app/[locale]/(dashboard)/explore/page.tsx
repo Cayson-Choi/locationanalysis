@@ -156,7 +156,7 @@ export default function ExplorePage() {
 
       {/* Controls */}
       <MapControls onMyLocation={handleMyLocation} />
-      <MapLegend />
+      <MapLegend visible={layers.businesses && businesses.length > 0} />
     </div>
   );
 }

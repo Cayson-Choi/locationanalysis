@@ -10,6 +10,9 @@ declare global {
         LatLng: new (lat: number, lng: number) => KakaoLatLng;
         LatLngBounds: new (sw: KakaoLatLng, ne: KakaoLatLng) => KakaoLatLngBounds;
         Marker: new (options: Record<string, unknown>) => KakaoMarker;
+        MarkerImage: new (src: string, size: KakaoSize, options?: Record<string, unknown>) => KakaoMarkerImage;
+        Size: new (width: number, height: number) => KakaoSize;
+        Point: new (x: number, y: number) => KakaoPoint;
         Circle: new (options: Record<string, unknown>) => KakaoCircle;
         Polygon: new (options: Record<string, unknown>) => KakaoPolygon;
         MarkerClusterer: new (options: Record<string, unknown>) => KakaoClusterer;
@@ -61,6 +64,23 @@ interface KakaoClusterer {
   setMap: (map: KakaoMap | null) => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface KakaoMarkerImage {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface KakaoSize {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface KakaoPoint {}
+
+function createColoredMarkerImage(color: string) {
+  const { kakao } = window;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/></svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const size = new kakao.maps.Size(24, 24);
+  const offset = new kakao.maps.Point(12, 12);
+  return new kakao.maps.MarkerImage(url, size, { offset });
+}
+
 export class KakaoMapAdapter implements MapAdapterInterface {
   private map: KakaoMap | null = null;
   private markers = new Map<string, KakaoMarker>();
@@ -108,11 +128,17 @@ export class KakaoMapAdapter implements MapAdapterInterface {
     const id = generateMarkerId();
     const position = new kakao.maps.LatLng(options.position.lat, options.position.lng);
 
-    const marker = new kakao.maps.Marker({
+    const markerOpts: Record<string, unknown> = {
       position,
       map: this.map,
       clickable: options.clickable ?? true,
-    });
+    };
+
+    if (options.color) {
+      markerOpts.image = createColoredMarkerImage(options.color);
+    }
+
+    const marker = new kakao.maps.Marker(markerOpts);
 
     if (options.clickable !== false && options.data) {
       kakao.maps.event.addListener(marker, 'click', () => {
