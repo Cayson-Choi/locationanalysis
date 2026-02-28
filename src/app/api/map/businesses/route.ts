@@ -22,6 +22,9 @@ const CATEGORY_MAP: Record<string, string> = {
   PM9: '약국',
 };
 
+// Valid codes: all Kakao categories + BUS (TAGO)
+const VALID_CODES = new Set([...Object.keys(CATEGORY_MAP), 'BUS']);
+
 interface KakaoDocument {
   id: string;
   place_name: string;
@@ -33,6 +36,23 @@ interface KakaoDocument {
   phone: string;
   x: string;
   y: string;
+}
+
+interface BusinessResult {
+  id: string;
+  name: string;
+  branch_name: string | null;
+  large_category: string;
+  medium_category: string;
+  small_category: string;
+  address_road: string;
+  address_jibun: string;
+  latitude: number;
+  longitude: number;
+  floor: string | null;
+  phone: string | null;
+  is_active: boolean;
+  cached_at: string;
 }
 
 async function searchCategoryPage(
@@ -83,12 +103,65 @@ async function searchCategory(
   return all;
 }
 
+// Fetch bus stops from TAGO API
+async function fetchTagoBusStops(
+  tagoKey: string,
+  lat: number,
+  lng: number
+): Promise<BusinessResult[]> {
+  try {
+    const base = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList';
+    const params = new URLSearchParams({
+      pageNo: '1',
+      numOfRows: '50',
+      gpsLati: String(lat),
+      gpsLong: String(lng),
+      _type: 'json',
+    });
+    const fullUrl = `${base}?serviceKey=${tagoKey}&${params.toString()}`;
+
+    const response = await fetch(fullUrl);
+    const text = await response.text();
+
+    // data.go.kr sometimes returns XML even with _type=json
+    if (!text.startsWith('{') && !text.startsWith('[')) {
+      console.warn('TAGO returned non-JSON:', text.substring(0, 200));
+      return [];
+    }
+
+    const data = JSON.parse(text);
+    const items = data?.response?.body?.items?.item;
+    if (!items) return [];
+    const arr = Array.isArray(items) ? items : [items];
+
+    return arr.map((item: Record<string, unknown>) => ({
+      id: String(item.nodeid || ''),
+      name: String(item.nodenm || ''),
+      branch_name: null,
+      large_category: '버스정류장',
+      medium_category: '',
+      small_category: '',
+      address_road: '',
+      address_jibun: '',
+      latitude: Number(item.gpslati || 0),
+      longitude: Number(item.gpslong || 0),
+      floor: null,
+      phone: null,
+      is_active: true,
+      cached_at: new Date().toISOString(),
+    }));
+  } catch (e) {
+    console.error('TAGO bus fetch error:', e);
+    return [];
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const lat = parseFloat(searchParams.get('lat') || '');
   const lng = parseFloat(searchParams.get('lng') || '');
   const radius = Math.min(parseInt(searchParams.get('radius') || '500'), 2000);
-  const categories = searchParams.get('categories'); // comma-separated codes e.g. "FD6,CE7,HP8"
+  const categories = searchParams.get('categories'); // comma-separated codes e.g. "FD6,CE7,BUS"
 
   if (isNaN(lat) || isNaN(lng)) {
     return NextResponse.json(
@@ -108,15 +181,20 @@ export async function GET(request: NextRequest) {
   // Default: main categories. If specified, use only those.
   const defaultCodes = ['FD6', 'CE7', 'CS2', 'HP8', 'PM9', 'AC5'];
   const codes = categories
-    ? categories.split(',').filter((c) => c in CATEGORY_MAP)
+    ? categories.split(',').filter((c) => VALID_CODES.has(c))
     : defaultCodes;
 
+  // Separate Kakao category codes from TAGO bus
+  const kakaoCodes = codes.filter((c) => c in CATEGORY_MAP);
+  const busEnabled = codes.includes('BUS');
+
   try {
-    const results = await Promise.all(
-      codes.map((code) => searchCategory(kakaoKey, code, lng, lat, radius))
+    // Fetch Kakao categories in parallel
+    const categoryResults = await Promise.all(
+      kakaoCodes.map((code) => searchCategory(kakaoKey, code, lng, lat, radius))
     );
 
-    const businesses = results.flatMap((docs) =>
+    const businesses: BusinessResult[] = categoryResults.flatMap((docs) =>
       docs.map((doc) => {
         const largeCategory = CATEGORY_MAP[doc.category_group_code] || '기타';
         const categoryParts = doc.category_name.split(' > ');
@@ -141,6 +219,15 @@ export async function GET(request: NextRequest) {
         };
       })
     );
+
+    // Fetch bus stops from TAGO if enabled
+    if (busEnabled) {
+      const tagoKey = process.env.TAGO_API_KEY;
+      if (tagoKey) {
+        const busStops = await fetchTagoBusStops(tagoKey, lat, lng);
+        businesses.push(...busStops);
+      }
+    }
 
     return NextResponse.json({
       success: true,
