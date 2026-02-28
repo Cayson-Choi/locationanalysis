@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { Locate, Layers, SlidersHorizontal } from 'lucide-react';
+import { Locate, Loader2, Layers, SlidersHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Label } from '@/components/ui/label';
@@ -28,15 +29,18 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
   useEffect(() => {
     if (pendingLocationRef.current && lat && lng) {
       pendingLocationRef.current = false;
+      toast.success('현재 위치로 이동했습니다', { id: 'geolocation', duration: 2000 });
       onMyLocation?.(lat, lng);
     }
   }, [lat, lng, onMyLocation]);
 
   const handleMyLocation = () => {
     pendingLocationRef.current = true;
+    toast.loading('현재 위치를 찾고 있습니다...', { id: 'geolocation' });
     getCurrentPosition();
     if (lat && lng) {
       pendingLocationRef.current = false;
+      toast.dismiss('geolocation');
       onMyLocation?.(lat, lng);
     }
   };
@@ -80,7 +84,7 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
           onClick={handleMyLocation}
           disabled={loading}
         >
-          <Locate className="h-5 w-5" />
+          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Locate className="h-5 w-5" />}
         </Button>
 
         {/* Categories Sheet */}
@@ -150,8 +154,8 @@ export function MapControls({ onMyLocation }: MapControlsProps) {
         onClick={handleMyLocation}
         disabled={loading}
       >
-        <Locate className="mr-2 h-4 w-4" />
-        {t('myLocation')}
+        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Locate className="mr-2 h-4 w-4" />}
+        {loading ? '위치 찾는 중...' : t('myLocation')}
       </Button>
 
       <Separator />
